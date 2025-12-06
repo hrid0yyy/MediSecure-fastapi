@@ -1,5 +1,6 @@
 from fastapi import FastAPI
-
+from routers import users
+from middleware import setup_middleware
 
 app = FastAPI(
     title="MediSecure",
@@ -7,6 +8,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
+setup_middleware(app)
+
+app.include_router(users.router)
 
 @app.get("/")
 async def root():

@@ -1,0 +1,12 @@
+python -m venv venv
+venv/Scripts/Activate
+pip install -r requirements.txt
+
+uvicorn main:app --reload
+
+
+docker run --name pgadmin -p 5050:80 -e PGADMIN_DEFAULT_EMAIL=admin@example.com -e PGADMIN_DEFAULT_PASSWORD=1234 -d dpage/pgadmin4
+docker run --name medisecure -e POSTGRES_PASSWORD=1234 -p 5432:5432 -d postgres
+docker inspect -f "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}" medisecure
+docker exec -t medisecure pg_dumpall -c -U postgres > db_dump.sql
+docker exec -i medisecure psql -U postgres < db_dump.sql
