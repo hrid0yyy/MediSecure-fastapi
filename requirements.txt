@@ -11,3 +11,4 @@ argon2-cffi
 python-jose[cryptography]
 fastapi-limiter
 email-validator
+resend
