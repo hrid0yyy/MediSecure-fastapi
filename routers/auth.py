@@ -183,6 +183,7 @@ async def signup(user: UserCreate, background_tasks: BackgroundTasks, db: Sessio
     return {"message": "Verification code sent. Please check your email."}
 
 @router.post("/verify-email", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+@router.post("/verify", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def verify_email(verification: UserVerify, db: Session = Depends(get_db)):
     # 1. Get data from Redis
     redis_key = f"registration:{verification.email}"

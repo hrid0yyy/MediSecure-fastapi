@@ -143,3 +143,31 @@
 2026-01-12 13:56:38,587 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
 2026-01-12 13:56:38,599 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
 2026-01-12 13:56:38,917 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0019s
+2026-01-15 12:19:10,107 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 12:19:10,773 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1845s
+2026-01-15 12:19:13,946 - INFO - Verification email sent to patient@hospital.com via Gmail.
+2026-01-15 12:20:22,893 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1207s
+2026-01-15 12:20:26,553 - INFO - Verification email sent to safin7816@gmail.com via Gmail.
+2026-01-15 12:21:26,061 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/verify Status: 200 Duration: 0.0000s
+2026-01-15 12:21:26,387 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 404 Duration: 0.0000s
+2026-01-15 12:21:51,654 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 404 Duration: 0.0000s
+2026-01-15 12:24:14,216 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0333s
+2026-01-15 12:24:54,694 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/login Status: 200 Duration: 0.0000s
+2026-01-15 12:24:54,730 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/login Status: 403 Duration: 0.0185s
+2026-01-15 12:26:03,382 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:26:04,658 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:26:04,687 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0061s
+2026-01-15 12:26:05,012 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:26:10,070 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0020s
+2026-01-15 12:26:10,375 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:26:40,727 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:27:09,206 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0020s
+2026-01-15 12:27:09,220 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0015s
+2026-01-15 12:27:09,547 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:44:10,394 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 12:44:11,217 - INFO - IP: 127.0.0.1 Method: GET Path: /openapi.json Status: 200 Duration: 0.2277s
+2026-01-15 12:46:11,974 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 12:46:12,567 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1369s
+2026-01-15 12:46:15,636 - INFO - Verification email sent to deaf@mail.com via Gmail.
+2026-01-15 12:46:28,541 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1136s
+2026-01-15 12:46:31,497 - INFO - Verification email sent to safin7816@gmail.com via Gmail.
