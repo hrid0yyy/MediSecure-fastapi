@@ -232,6 +232,114 @@ async def get_appointment(
     return appointment_to_response(appointment, db)
 
 
+@router.get("/doctor/{doctor_id}/slots")
+async def get_doctor_available_slots(
+    doctor_id: int,
+    date: str,  # Format: YYYY-MM-DD
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get available time slots for a doctor on a specific date.
+    
+    GET /api/appointments/doctor/{doctor_id}/slots?date=2026-01-22
+    """
+    # Find doctor
+    doctor = db.query(Doctor).filter(Doctor.id == doctor_id).first()
+    if not doctor:
+        doctor = db.query(Doctor).filter(Doctor.user_id == doctor_id).first()
+    
+    if not doctor:
+        raise HTTPException(status_code=404, detail="Doctor not found")
+    
+    if not doctor.is_available:
+        return {"available_slots": [], "message": "Doctor is not available"}
+    
+    # Parse the date
+    try:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    
+    # Check if it's a valid day (not in the past)
+    if target_date < datetime.utcnow().date():
+        return {"available_slots": [], "message": "Cannot book appointments in the past"}
+    
+    # Get doctor's working hours (default 9 AM to 5 PM)
+    available_hours = doctor.available_hours or {"start": "09:00", "end": "17:00"}
+    start_hour = int(available_hours.get("start", "09:00").split(":")[0])
+    end_hour = int(available_hours.get("end", "17:00").split(":")[0])
+    
+    # Get doctor's available days
+    available_days = doctor.available_days or ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    day_name = target_date.strftime("%A")
+    
+    if day_name not in available_days:
+        return {"available_slots": [], "message": f"Doctor is not available on {day_name}s"}
+    
+    # Generate all possible slots (30-min intervals)
+    all_slots = []
+    for hour in range(start_hour, end_hour):
+        all_slots.append(f"{hour:02d}:00")
+        all_slots.append(f"{hour:02d}:30")
+    
+    # Get existing appointments for this doctor on this date
+    doctor_user_id = doctor.user_id
+    start_of_day = datetime.combine(target_date, datetime.min.time())
+    end_of_day = datetime.combine(target_date, datetime.max.time())
+    
+    doctor_appointments = db.query(Appointment).filter(
+        Appointment.doctor_id == doctor_user_id,
+        Appointment.appointment_date >= start_of_day,
+        Appointment.appointment_date <= end_of_day,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED])
+    ).all()
+    
+    # Get doctor's booked times
+    doctor_booked_times = set()
+    for apt in doctor_appointments:
+        apt_time = apt.appointment_date.strftime("%H:%M")
+        doctor_booked_times.add(apt_time)
+        # Also block the next slot if appointment is longer than 30 min
+        duration = apt.duration_minutes or 30
+        if duration > 30:
+            apt_end = apt.appointment_date + timedelta(minutes=30)
+            doctor_booked_times.add(apt_end.strftime("%H:%M"))
+    
+    # Get PATIENT's existing appointments for this date (to prevent double booking)
+    patient_appointments = db.query(Appointment).filter(
+        Appointment.patient_id == current_user.id,
+        Appointment.appointment_date >= start_of_day,
+        Appointment.appointment_date <= end_of_day,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED])
+    ).all()
+    
+    patient_booked_times = set()
+    for apt in patient_appointments:
+        apt_time = apt.appointment_date.strftime("%H:%M")
+        patient_booked_times.add(apt_time)
+        duration = apt.duration_minutes or 30
+        if duration > 30:
+            apt_end = apt.appointment_date + timedelta(minutes=30)
+            patient_booked_times.add(apt_end.strftime("%H:%M"))
+    
+    # Combine all unavailable slots
+    all_booked_times = doctor_booked_times.union(patient_booked_times)
+    
+    # Filter available slots
+    available_slots = [slot for slot in all_slots if slot not in all_booked_times]
+    
+    return {
+        "doctor_id": doctor.id,
+        "doctor_name": doctor.name,
+        "date": date,
+        "available_slots": available_slots,
+        "booked_slots": list(doctor_booked_times),
+        "your_booked_slots": list(patient_booked_times),
+        "working_hours": available_hours
+    }
+
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_appointment(
@@ -278,6 +386,37 @@ async def create_appointment(
         appointment_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
+    
+    # Check if this time slot is already booked for the DOCTOR
+    slot_start = appointment_date
+    slot_end = appointment_date + timedelta(minutes=data.duration_minutes or 30)
+    
+    doctor_conflict = db.query(Appointment).filter(
+        Appointment.doctor_id == doctor_user_id,
+        Appointment.appointment_date >= slot_start,
+        Appointment.appointment_date < slot_end,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED])
+    ).first()
+    
+    if doctor_conflict:
+        raise HTTPException(
+            status_code=409, 
+            detail="This time slot is already booked with this doctor. Please choose another time."
+        )
+    
+    # Check if PATIENT already has an appointment at the same time (with any doctor)
+    patient_conflict = db.query(Appointment).filter(
+        Appointment.patient_id == patient_user_id,
+        Appointment.appointment_date >= slot_start,
+        Appointment.appointment_date < slot_end,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.CONFIRMED])
+    ).first()
+    
+    if patient_conflict:
+        raise HTTPException(
+            status_code=409, 
+            detail="You already have an appointment at this time. Please choose another time slot."
+        )
     
     new_appointment = Appointment(
         patient_id=patient_user_id,
