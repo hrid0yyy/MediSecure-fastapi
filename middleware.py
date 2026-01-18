@@ -29,9 +29,16 @@ async def log_requests_middleware(request: Request, call_next):
 
 def setup_middleware(app: FastAPI):
     # CORS Middleware
+    # When allow_credentials=True, you cannot use wildcard "*" for origins
+    # Must specify explicit origins
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # In production, replace with specific origins
+        allow_origins=[
+            "http://localhost:5173",  # Vite dev server
+            "http://localhost:3000",  # Alternative dev server
+            "http://127.0.0.1:5173",
+            "http://127.0.0.1:3000",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

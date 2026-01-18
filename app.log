@@ -171,3 +171,39 @@
 2026-01-15 12:46:15,636 - INFO - Verification email sent to deaf@mail.com via Gmail.
 2026-01-15 12:46:28,541 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1136s
 2026-01-15 12:46:31,497 - INFO - Verification email sent to safin7816@gmail.com via Gmail.
+2026-01-15 12:52:13,435 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 400 Duration: 0.0057s
+2026-01-15 12:54:16,998 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 12:54:17,456 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 400 Duration: 0.0309s
+2026-01-15 12:54:51,178 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/login Status: 200 Duration: 0.0000s
+2026-01-15 12:54:51,201 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/login Status: 403 Duration: 0.0189s
+2026-01-15 12:56:46,903 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 400 Duration: 0.0075s
+2026-01-15 12:58:17,032 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 12:58:17,418 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.0691s
+2026-01-15 12:58:20,740 - INFO - Verification email sent to redwanbosssavage@gmail.com via Gmail.
+2026-01-15 12:59:09,411 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/verify Status: 200 Duration: 0.0000s
+2026-01-15 12:59:09,419 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0036s
+2026-01-15 13:00:36,857 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 400 Duration: 0.0057s
+2026-01-15 13:02:41,511 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 13:03:07,235 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 13:06:42,250 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 400 Duration: 0.0095s
+2026-01-15 18:18:24,887 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/signup Status: 200 Duration: 0.0000s
+2026-01-15 18:18:25,362 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.0941s
+2026-01-15 18:18:29,068 - INFO - Verification email sent to shah.redwan.ahmed.safin@gmail.com via Gmail.
+2026-01-15 18:18:56,512 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/verify Status: 200 Duration: 0.0000s
+2026-01-15 18:18:56,523 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0050s
+2026-01-15 18:19:00,024 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0057s
+2026-01-15 18:19:01,679 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0030s
+2026-01-15 18:19:02,878 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0037s
+2026-01-15 18:19:03,325 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 422 Duration: 0.0042s
+2026-01-15 18:19:43,769 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 429 Duration: 0.0025s
+2026-01-15 18:21:03,869 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 18:21:04,511 - INFO - IP: 127.0.0.1 Method: GET Path: /openapi.json Status: 200 Duration: 0.1410s
+2026-01-15 18:21:44,475 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 200 Duration: 0.0224s
+2026-01-15 18:21:45,881 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 400 Duration: 0.0049s
+2026-01-15 18:29:06,084 - INFO - IP: 127.0.0.1 Method: GET Path: /docs Status: 200 Duration: 0.0000s
+2026-01-15 18:29:06,457 - INFO - IP: 127.0.0.1 Method: GET Path: /openapi.json Status: 200 Duration: 0.1468s
+2026-01-15 18:29:39,858 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/signup Status: 201 Duration: 0.1465s
+2026-01-15 18:29:43,199 - INFO - Verification email sent to shah.redwan.ahmed.safin@gmail.com via Gmail.
+2026-01-15 18:30:35,947 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/verify Status: 200 Duration: 0.0166s
+2026-01-15 18:31:17,012 - INFO - IP: 127.0.0.1 Method: OPTIONS Path: /auth/login Status: 200 Duration: 0.0000s
+2026-01-15 18:31:17,115 - INFO - IP: 127.0.0.1 Method: POST Path: /auth/login Status: 200 Duration: 0.1034s
