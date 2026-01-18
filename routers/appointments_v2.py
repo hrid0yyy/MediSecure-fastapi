@@ -6,9 +6,9 @@ Full CRUD operations for appointments with role-based access.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, func
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from config.database import get_db
@@ -21,22 +21,25 @@ router = APIRouter(prefix="/api/appointments", tags=["Appointments"])
 # ============ SCHEMAS ============
 
 class AppointmentCreate(BaseModel):
-    patient_id: Optional[int] = None  # Optional if patient is creating for themselves
+    patient_id: Optional[int] = None
     doctor_id: int
-    scheduled_time: str  # ISO datetime string
-    type: str = "consultation"
+    appointment_date: Optional[str] = None  # ISO datetime string
+    scheduled_time: Optional[str] = None    # Alias for appointment_date
+    reason: Optional[str] = "Consultation"
     notes: Optional[str] = None
+    duration_minutes: Optional[int] = 30
 
 
 class AppointmentUpdate(BaseModel):
-    scheduled_time: Optional[str] = None
-    type: Optional[str] = None
+    appointment_date: Optional[str] = None
+    reason: Optional[str] = None
     notes: Optional[str] = None
-    status: Optional[str] = None
+    duration_minutes: Optional[int] = None
 
 
 class AppointmentStatusUpdate(BaseModel):
     status: str  # scheduled, confirmed, completed, cancelled
+    cancellation_reason: Optional[str] = None
 
 
 class AppointmentResponse(BaseModel):
@@ -45,11 +48,12 @@ class AppointmentResponse(BaseModel):
     patient_name: Optional[str] = None
     doctor_id: int
     doctor_name: Optional[str] = None
-    scheduled_time: str
-    end_time: Optional[str] = None
-    type: str
+    appointment_date: str
+    scheduled_time: Optional[str] = None  # Alias
+    reason: str
     status: str
     notes: Optional[str] = None
+    duration_minutes: int
     cancellation_reason: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
@@ -70,23 +74,27 @@ class AppointmentsListResponse(BaseModel):
 
 def appointment_to_response(apt: Appointment, db: Session) -> dict:
     """Convert Appointment model to response format"""
-    patient = db.query(Patient).filter(Patient.id == apt.patient_id).first() if apt.patient_id else None
-    doctor = db.query(Doctor).filter(Doctor.id == apt.doctor_id).first() if apt.doctor_id else None
+    # Get patient name - appointments reference users.id, not patients.id
+    patient = db.query(User).filter(User.id == apt.patient_id).first()
+    doctor = db.query(User).filter(User.id == apt.doctor_id).first()
+    
+    apt_date = apt.appointment_date.isoformat() if apt.appointment_date else None
     
     return {
         "id": apt.id,
         "patient_id": apt.patient_id,
-        "patient_name": patient.name if patient else None,
+        "patient_name": patient.name if patient else f"Patient #{apt.patient_id}",
         "doctor_id": apt.doctor_id,
-        "doctor_name": doctor.name if doctor else None,
-        "scheduled_time": apt.scheduled_time.isoformat() if apt.scheduled_time else None,
-        "end_time": apt.end_time.isoformat() if hasattr(apt, 'end_time') and apt.end_time else None,
-        "type": apt.appointment_type if hasattr(apt, 'appointment_type') else "consultation",
+        "doctor_name": doctor.name if doctor else f"Doctor #{apt.doctor_id}",
+        "appointment_date": apt_date,
+        "scheduled_time": apt_date,  # Alias for frontend compatibility
+        "reason": apt.reason if apt.reason else "Consultation",
         "status": apt.status.value if apt.status else "scheduled",
-        "notes": apt.notes if hasattr(apt, 'notes') else None,
-        "cancellation_reason": apt.cancellation_reason if hasattr(apt, 'cancellation_reason') else None,
+        "notes": apt.notes,
+        "duration_minutes": apt.duration_minutes or 30,
+        "cancellation_reason": apt.cancellation_reason,
         "created_at": apt.created_at.isoformat() if apt.created_at else None,
-        "updated_at": apt.updated_at.isoformat() if hasattr(apt, 'updated_at') and apt.updated_at else None
+        "updated_at": apt.updated_at.isoformat() if apt.updated_at else None
     }
 
 
@@ -111,20 +119,12 @@ async def get_appointments(
     """
     query = db.query(Appointment)
     
-    # Role-based filtering
+    # Role-based filtering: appointments uses users.id for patient_id and doctor_id
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if patient:
-            query = query.filter(Appointment.patient_id == patient.id)
-        else:
-            return {"appointments": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
+        query = query.filter(Appointment.patient_id == current_user.id)
     
     elif current_user.role == UserRole.DOCTOR:
-        doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
-        if doctor:
-            query = query.filter(Appointment.doctor_id == doctor.id)
-        else:
-            return {"appointments": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
+        query = query.filter(Appointment.doctor_id == current_user.id)
     
     # Apply filters
     if status:
@@ -135,10 +135,9 @@ async def get_appointments(
             pass
     
     if date:
-        from sqlalchemy import func
         try:
             filter_date = datetime.fromisoformat(date).date()
-            query = query.filter(func.date(Appointment.scheduled_time) == filter_date)
+            query = query.filter(func.date(Appointment.appointment_date) == filter_date)
         except ValueError:
             pass
     
@@ -150,14 +149,14 @@ async def get_appointments(
     
     total = query.count()
     skip = (page - 1) * limit
-    appointments = query.order_by(Appointment.scheduled_time.desc()).offset(skip).limit(limit).all()
+    appointments = query.order_by(Appointment.appointment_date.desc()).offset(skip).limit(limit).all()
     
     return {
         "appointments": [appointment_to_response(a, db) for a in appointments],
         "total": total,
         "page": page,
         "limit": limit,
-        "total_pages": (total + limit - 1) // limit
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
     }
 
 
@@ -176,17 +175,14 @@ async def get_my_appointments(
     """
     query = db.query(Appointment)
     
+    # appointments table uses users.id directly
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if not patient:
-            return {"appointments": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
-        query = query.filter(Appointment.patient_id == patient.id)
-    
+        query = query.filter(Appointment.patient_id == current_user.id)
     elif current_user.role == UserRole.DOCTOR:
-        doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
-        if not doctor:
-            return {"appointments": [], "total": 0, "page": page, "limit": limit, "total_pages": 0}
-        query = query.filter(Appointment.doctor_id == doctor.id)
+        query = query.filter(Appointment.doctor_id == current_user.id)
+    else:
+        # Admin/Staff see all
+        pass
     
     if status:
         try:
@@ -197,14 +193,14 @@ async def get_my_appointments(
     
     total = query.count()
     skip = (page - 1) * limit
-    appointments = query.order_by(Appointment.scheduled_time.desc()).offset(skip).limit(limit).all()
+    appointments = query.order_by(Appointment.appointment_date.desc()).offset(skip).limit(limit).all()
     
     return {
         "appointments": [appointment_to_response(a, db) for a in appointments],
         "total": total,
         "page": page,
         "limit": limit,
-        "total_pages": (total + limit - 1) // limit
+        "total_pages": (total + limit - 1) // limit if total > 0 else 0
     }
 
 
@@ -226,13 +222,11 @@ async def get_appointment(
     
     # Check access permissions
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if not patient or appointment.patient_id != patient.id:
+        if appointment.patient_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
     
     elif current_user.role == UserRole.DOCTOR:
-        doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
-        if not doctor or appointment.doctor_id != doctor.id:
+        if appointment.doctor_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
     
     return appointment_to_response(appointment, db)
@@ -250,42 +244,52 @@ async def create_appointment(
     
     POST /api/appointments
     """
-    # Verify doctor exists
+    # Use appointment_date or scheduled_time (alias)
+    date_str = data.appointment_date or data.scheduled_time
+    if not date_str:
+        raise HTTPException(status_code=400, detail="appointment_date or scheduled_time is required")
+    
+    # The doctor_id in the request refers to doctor.id (from doctors table)
+    # But appointments.doctor_id references users.id
+    # So we need to find the user_id from doctors table
     doctor = db.query(Doctor).filter(Doctor.id == data.doctor_id).first()
     if not doctor:
-        raise HTTPException(status_code=404, detail="Doctor not found")
+        # Maybe doctor_id is actually user_id? Try that
+        doctor = db.query(Doctor).filter(Doctor.user_id == data.doctor_id).first()
+        if not doctor:
+            raise HTTPException(status_code=404, detail="Doctor not found")
     
     if not doctor.is_available:
         raise HTTPException(status_code=400, detail="Doctor is not available")
     
-    # Determine patient_id
-    patient_id = data.patient_id
+    # Get doctor's user_id for appointment
+    doctor_user_id = doctor.user_id
+    
+    # Determine patient_id (which is users.id)
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if not patient:
-            raise HTTPException(status_code=400, detail="Patient profile not found")
-        patient_id = patient.id
-    elif not patient_id:
+        patient_user_id = current_user.id
+    elif data.patient_id:
+        patient_user_id = data.patient_id
+    else:
         raise HTTPException(status_code=400, detail="patient_id is required")
     
     # Parse scheduled time
     try:
-        scheduled_time = datetime.fromisoformat(data.scheduled_time.replace('Z', '+00:00'))
+        appointment_date = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid scheduled_time format")
+        raise HTTPException(status_code=400, detail="Invalid date format. Use ISO format.")
     
     new_appointment = Appointment(
-        patient_id=patient_id,
-        doctor_id=data.doctor_id,
-        scheduled_time=scheduled_time,
+        patient_id=patient_user_id,
+        doctor_id=doctor_user_id,
+        appointment_date=appointment_date,
+        reason=data.reason or "Consultation",
+        duration_minutes=data.duration_minutes or 30,
+        notes=data.notes,
         status=AppointmentStatus.SCHEDULED,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
-    
-    if hasattr(new_appointment, 'appointment_type'):
-        new_appointment.appointment_type = data.type
-    if hasattr(new_appointment, 'notes'):
-        new_appointment.notes = data.notes
     
     db.add(new_appointment)
     db.commit()
@@ -313,38 +317,24 @@ async def update_appointment(
     
     # Check permissions
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if not patient or appointment.patient_id != patient.id:
+        if appointment.patient_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
-        # Patients can only update limited fields
-        if data.status:
-            raise HTTPException(status_code=403, detail="Patients cannot change status directly")
     
     update_data = data.model_dump(exclude_unset=True)
     
-    if "scheduled_time" in update_data and update_data["scheduled_time"]:
+    if "appointment_date" in update_data and update_data["appointment_date"]:
         try:
-            update_data["scheduled_time"] = datetime.fromisoformat(
-                update_data["scheduled_time"].replace('Z', '+00:00')
+            update_data["appointment_date"] = datetime.fromisoformat(
+                update_data["appointment_date"].replace('Z', '+00:00')
             )
         except ValueError:
-            del update_data["scheduled_time"]
-    
-    if "status" in update_data:
-        try:
-            update_data["status"] = AppointmentStatus(update_data["status"])
-        except ValueError:
-            del update_data["status"]
+            del update_data["appointment_date"]
     
     for field, value in update_data.items():
-        if field == "type" and hasattr(appointment, 'appointment_type'):
-            appointment.appointment_type = value
-        elif hasattr(appointment, field):
+        if hasattr(appointment, field):
             setattr(appointment, field, value)
     
-    if hasattr(appointment, 'updated_at'):
-        appointment.updated_at = datetime.utcnow()
-    
+    appointment.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(appointment)
     
@@ -363,23 +353,33 @@ async def update_appointment_status(
     
     PATCH /api/appointments/{appointment_id}/status
     """
-    if current_user.role not in [UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.STAFF, UserRole.DOCTOR]:
-        raise HTTPException(status_code=403, detail="Not authorized to change status")
-    
     appointment = db.query(Appointment).filter(Appointment.id == appointment_id).first()
     
     if not appointment:
         raise HTTPException(status_code=404, detail="Appointment not found")
     
+    # Check permissions based on action
+    if data.status == "cancelled":
+        # Anyone involved can cancel
+        if current_user.role == UserRole.PATIENT and appointment.patient_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    elif data.status in ["confirmed", "completed"]:
+        # Only doctor or admin can confirm/complete
+        if current_user.role not in [UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.STAFF, UserRole.DOCTOR]:
+            raise HTTPException(status_code=403, detail="Not authorized to change status")
+        if current_user.role == UserRole.DOCTOR and appointment.doctor_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+    
     try:
         new_status = AppointmentStatus(data.status)
         appointment.status = new_status
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid status")
+        raise HTTPException(status_code=400, detail=f"Invalid status: {data.status}")
     
-    if hasattr(appointment, 'updated_at'):
-        appointment.updated_at = datetime.utcnow()
+    if data.status == "cancelled" and data.cancellation_reason:
+        appointment.cancellation_reason = data.cancellation_reason
     
+    appointment.updated_at = datetime.utcnow()
     db.commit()
     
     return {
@@ -407,14 +407,11 @@ async def cancel_appointment(
     
     # Check permissions
     if current_user.role == UserRole.PATIENT:
-        patient = db.query(Patient).filter(Patient.user_id == current_user.id).first()
-        if not patient or appointment.patient_id != patient.id:
+        if appointment.patient_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
     
     appointment.status = AppointmentStatus.CANCELLED
-    if hasattr(appointment, 'updated_at'):
-        appointment.updated_at = datetime.utcnow()
-    
+    appointment.updated_at = datetime.utcnow()
     db.commit()
     
     return {"message": "Appointment cancelled successfully"}
