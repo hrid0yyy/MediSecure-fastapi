@@ -5,6 +5,18 @@ from fastapi import HTTPException, status
 from models.message import Message, MessageAttachment
 from schemas.message import MessageCreate
 from utils.encryption import encrypt_data, decrypt_data
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def safe_decrypt(encrypted_content: str) -> str:
+    """Safely decrypt content, returning placeholder if decryption fails"""
+    try:
+        return decrypt_data(encrypted_content)
+    except Exception as e:
+        logger.warning(f"Failed to decrypt message: {e}")
+        return "[Message could not be decrypted - encryption key may have changed]"
 
 
 class MessagingService:
@@ -59,9 +71,9 @@ class MessagingService:
         
         messages = query.order_by(Message.created_at.desc()).offset(skip).limit(limit).all()
         
-        # Decrypt messages
+        # Decrypt messages safely
         for message in messages:
-            message.content = decrypt_data(message.encrypted_content)
+            message.content = safe_decrypt(message.encrypted_content)
         
         return messages, total, unread_count
 
@@ -78,9 +90,9 @@ class MessagingService:
         total = query.count()
         messages = query.order_by(Message.created_at.desc()).offset(skip).limit(limit).all()
         
-        # Decrypt messages
+        # Decrypt messages safely
         for message in messages:
-            message.content = decrypt_data(message.encrypted_content)
+            message.content = safe_decrypt(message.encrypted_content)
         
         return messages, total
 
@@ -106,8 +118,8 @@ class MessagingService:
                 detail="Not authorized to view this message"
             )
         
-        # Decrypt message
-        message.content = decrypt_data(message.encrypted_content)
+        # Decrypt message safely
+        message.content = safe_decrypt(message.encrypted_content)
         
         # Mark as read if recipient
         if message.recipient_id == user_id and not message.is_read:

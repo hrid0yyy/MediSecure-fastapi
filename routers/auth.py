@@ -15,6 +15,7 @@ from utils import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     generate_device_fingerprint
 )
+from utils.security import get_current_user
 from datetime import datetime, timedelta
 import logging
 import json
@@ -327,6 +328,130 @@ async def login(user_credentials: UserLogin, request: Request, response: Respons
             "is_verified": user.is_verified
         },
         "message": "Login successful"
+    }
+
+
+@router.post("/refresh")
+async def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    """
+    Refresh access token using refresh token from HttpOnly cookie.
+    
+    POST /auth/refresh
+    """
+    # Get refresh token from cookie
+    refresh_token = request.cookies.get("refresh_token")
+    
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not found"
+        )
+    
+    try:
+        # Find the refresh token in Redis
+        # We need to find it by pattern since we store it with user_id prefix
+        keys = await redis_client.keys(f"refresh_token:*:{refresh_token}")
+        
+        if not keys:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token"
+            )
+        
+        # Get stored data
+        stored_data_json = await redis_client.get(keys[0])
+        if not stored_data_json:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token expired"
+            )
+        
+        stored_data = json.loads(stored_data_json)
+        user_id = stored_data.get("user_id")
+        
+        # Get user from database
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        # Generate new access token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        new_access_token = create_access_token(
+            data={"sub": str(user.id), "role": user.role.value, "email": user.email},
+            expires_delta=access_token_expires
+        )
+        
+        # Set new access token cookie
+        response.set_cookie(
+            key="access_token",
+            value=new_access_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=15 * 60,
+            path="/"
+        )
+        
+        return {
+            "message": "Token refreshed successfully",
+            "access_token": new_access_token,
+            "token_type": "bearer"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token refresh failed"
+        )
+
+
+@router.post("/logout")
+async def logout(request: Request, response: Response):
+    """
+    Logout user by clearing cookies and invalidating refresh token.
+    
+    POST /auth/logout
+    """
+    refresh_token = request.cookies.get("refresh_token")
+    
+    # Delete refresh token from Redis if exists
+    if refresh_token:
+        try:
+            keys = await redis_client.keys(f"refresh_token:*:{refresh_token}")
+            for key in keys:
+                await redis_client.delete(key)
+        except:
+            pass
+    
+    # Clear cookies
+    response.delete_cookie(key="access_token", path="/")
+    response.delete_cookie(key="refresh_token", path="/")
+    
+    return {"message": "Logged out successfully"}
+
+
+@router.get("/me")
+async def get_current_user_info(
+    request: Request, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get current authenticated user's info.
+    
+    GET /auth/me
+    """
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "name": current_user.name,
+        "role": current_user.role.value,
+        "is_verified": current_user.is_verified
     }
 
 @router.post("/verify-device", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
