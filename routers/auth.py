@@ -16,6 +16,7 @@ from utils import (
     generate_device_fingerprint
 )
 from utils.security import get_current_user
+from services.security_service import ThreatDetectionService
 from datetime import datetime, timedelta
 import logging
 import json
@@ -224,6 +225,13 @@ async def verify_email(verification: UserVerify, db: Session = Depends(get_db)):
 
 @router.post("/login", dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def login(user_credentials: UserLogin, request: Request, response: Response, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    # Get client IP for threat detection
+    client_ip = request.headers.get("X-Forwarded-For", request.client.host if request.client else "unknown")
+    if "," in client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    
+    user_agent = request.headers.get("User-Agent", "unknown")
+    
     # 1. Get User
     user = db.query(User).filter(User.email == user_credentials.email).first()
 
@@ -235,6 +243,20 @@ async def login(user_credentials: UserLogin, request: Request, response: Respons
             raise HTTPException(status_code=403, detail="Account locked due to too many failed attempts. Please try again in 30 minutes.")
 
     if not user:
+        # Track failed login attempt for non-existent user
+        threat_result = await ThreatDetectionService.track_failed_login(
+            db=db,
+            ip_address=client_ip,
+            email=user_credentials.email,
+            user_agent=user_agent
+        )
+        
+        if threat_result["should_block"]:
+            raise HTTPException(
+                status_code=403,
+                detail="Too many failed login attempts. Your IP has been blocked for security reasons."
+            )
+        
         raise HTTPException(status_code=403, detail="Invalid credentials")
 
     # 2. Check Verification
@@ -243,16 +265,32 @@ async def login(user_credentials: UserLogin, request: Request, response: Respons
 
     # 3. Verify Password (using stored salt)
     if not verify_password(user_credentials.password, user.hashed_password, user.salt):
+        # Track failed login attempt
+        threat_result = await ThreatDetectionService.track_failed_login(
+            db=db,
+            ip_address=client_ip,
+            email=user_credentials.email,
+            user_agent=user_agent
+        )
+        
         # INCREMENT FAILURE COUNTER
         redis_key = f"failed_login:{user.email}"
         attempts = await redis_client.incr(redis_key)
         if attempts == 1:
             await redis_client.expire(redis_key, 1800) # 30 mins
         
+        # Check if IP should be blocked
+        if threat_result["should_block"]:
+            raise HTTPException(
+                status_code=403,
+                detail="Too many failed login attempts. Your IP has been blocked for security reasons."
+            )
+        
         raise HTTPException(status_code=403, detail="Invalid credentials")
     
-    # Login Successful - Clear Counter
+    # Login Successful - Clear Counter and Failed Login Tracking
     await redis_client.delete(f"failed_login:{user.email}")
+    await ThreatDetectionService.clear_failed_attempts(client_ip)
 
     # 4. Device Fingerprinting
     current_fingerprint = generate_device_fingerprint(request)

@@ -12,7 +12,7 @@ from middleware import setup_middleware
 import sys
 sys.path.insert(0, "middleware")
 from audit import AuditLoggingMiddleware
-from security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware
+from security import SecurityHeadersMiddleware, RequestSizeLimitMiddleware, IPBlockingMiddleware
 sys.path.remove("middleware")
 from fastapi_limiter import FastAPILimiter
 from config.redis_db import redis_client
@@ -36,6 +36,7 @@ app = FastAPI(
 
 # Setup middleware
 setup_middleware(app)
+app.add_middleware(IPBlockingMiddleware)  # Check IP blocking first
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestSizeLimitMiddleware, max_request_size=10 * 1024 * 1024)  # 10 MB
 app.add_middleware(AuditLoggingMiddleware)

@@ -1,6 +1,9 @@
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, JSONResponse
+from sqlalchemy.orm import Session
+from config.database import SessionLocal
+from models.blocked_ip import BlockedIP
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """
@@ -96,3 +99,57 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
                 )
         
         return await call_next(request)
+
+
+class IPBlockingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware to block requests from blacklisted IP addresses.
+    Checks the database for blocked IPs before processing requests.
+    """
+    
+    async def dispatch(self, request: Request, call_next):
+        # Get client IP address
+        client_ip = self._get_client_ip(request)
+        
+        # Check if IP is blocked
+        db: Session = SessionLocal()
+        try:
+            blocked_ip = db.query(BlockedIP).filter(
+                BlockedIP.ip_address == client_ip,
+                BlockedIP.is_active == True
+            ).first()
+            
+            if blocked_ip:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "detail": "Access forbidden. Your IP address has been blocked.",
+                        "ip": client_ip
+                    }
+                )
+        finally:
+            db.close()
+        
+        return await call_next(request)
+    
+    def _get_client_ip(self, request: Request) -> str:
+        """
+        Extract client IP address from request.
+        Checks X-Forwarded-For header first (for proxy/load balancer scenarios).
+        """
+        # Check X-Forwarded-For header (if behind proxy)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # Get the first IP in the chain (original client IP)
+            return forwarded_for.split(",")[0].strip()
+        
+        # Check X-Real-IP header (alternative proxy header)
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+        
+        # Fall back to direct client IP
+        if request.client:
+            return request.client.host
+        
+        return "unknown"

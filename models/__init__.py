@@ -14,4 +14,6 @@ from .billing import Invoice, InvoiceItem, Payment, InvoiceStatus, PaymentMethod
 from .insurance import InsuranceClaim, ClaimStatus
 from .compliance import PHIAccessLog, Consent
 from .profile import UserProfile
+from .blocked_ip import BlockedIP
+from .security_threat import SecurityThreat, AdminNotification, ThreatLevel, ThreatType
 
